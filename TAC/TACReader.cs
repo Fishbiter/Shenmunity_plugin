@@ -229,7 +229,7 @@ namespace Shenmunity
 
         static Stream GetStream(string file, TACEntry e, out uint length, bool unzip)
         { 
-            if(e.m_parent != null && e.m_parent.m_zipped)
+            if(e.m_parent != null)
             {
                 var parent = GetStream(file, e.m_parent, out length, unzip);
                 return new SubStream(parent, e.m_offset, e.m_length);
@@ -293,6 +293,9 @@ namespace Shenmunity
             {
                 if(fi.EndsWith(".tac"))
                 {
+                    if (fi.Contains("audio"))
+                        continue;
+
                     BuildFilesInTAC(shortForm, fi.Replace("\\", "/"));
                 }
             }
@@ -364,44 +367,21 @@ namespace Shenmunity
 
             foreach (var tac in m_files.Keys)
             {
-                using (BinaryReader rawReader = new BinaryReader(new FileStream(GetTAC(tac), FileMode.Open, FileAccess.Read, FileShare.Read)))
+                foreach (var e in m_files[tac].Values.ToArray())
                 {
-                    foreach (var e in m_files[tac].Values.ToArray())
-                    {
-                        var reader = rawReader;
-                        reader.BaseStream.Seek(e.m_offset, SeekOrigin.Begin);
-                        var header = reader.ReadBytes(4);
-                        string type = Encoding.ASCII.GetString(header);
+                    uint len;
+                    var reader = GetBytes(e.m_path, out len);
+                    var header = reader.ReadBytes(4);
+                    string type = Encoding.ASCII.GetString(header).Trim('\0');
 
-                        bool zipped = header[0] == 0x1f && header[1] == 0x8b;
-                        if (zipped)
-                        {
-                            reader.BaseStream.Seek(-4, SeekOrigin.Current);
-                            reader = new BinaryReader(new GzipWithSeek(reader.BaseStream, CompressionMode.Decompress));
-                            header = reader.ReadBytes(4);
-                            type = Encoding.ASCII.GetString(header);
+                    e.m_type = type;
 
-                            e.m_zipped = true;
-                        }
-
-                        e.m_type = type;
-
-                        AddEntryToType(type, e);
-
-                        if (type == "PAKS")
-                        {
-                            ReadPAKS(tac, e, reader);
-                        }
-                        else if(type == "PAKF")
-                        {
-                            ReadPAKF(tac, e, reader);
-                        }
-                    }
+                    AddEntryToType(tac, type, e);
                 }
             }
         }
 
-        static void AddEntryToType(string type, TACEntry e)
+        static void AddEntryToType(string tac, string type, TACEntry e)
         {
             for (int i = 0; i < (int)FileType.COUNT; i++)
             {
@@ -411,6 +391,29 @@ namespace Shenmunity
                     {
                         GetFiles((FileType)i).Add(e);
                         e.m_fileType = (FileType)i;
+
+                        //try
+                        {
+                            if (type == "PAKS")
+                            {
+                                uint len;
+                                ReadPAKS(tac, e, GetBytes(e.m_path, out len));
+                            }
+                            else if (type == "PAKF")
+                            {
+                                uint len;
+                                ReadPAKF(tac, e, GetBytes(e.m_path, out len));
+                            }
+                            else if (type == "AFS")
+                            {
+                                uint len;
+                                ReadAFS(tac, e, GetBytes(e.m_path, out len));
+                            }
+                        }
+                        //catch(Exception exc)
+                        //{
+                        //    Debug.Log(exc.ToString());
+                        //}
 
                         return;
                     }
@@ -424,119 +427,84 @@ namespace Shenmunity
 
         static void ReadPAKS(string tac, TACEntry parent, BinaryReader r)
         {
-            uint paksSize = r.ReadUInt32();
-            uint c1 = r.ReadUInt32();
-            uint c2 = r.ReadUInt32();
+            var paks = new PAKS(r);
 
-            ReadIPAC(tac, parent, r);
+            if (paks.m_iPac != null)
+            {
+                AddIPAC(tac, parent, paks.m_iPac.m_entries);
+            }
         }
 
         static void ReadPAKF(string tac, TACEntry parent, BinaryReader r)
         {
-            uint pakfSize = r.ReadUInt32();
-            uint c1 = r.ReadUInt32();
-            uint numTextures = r.ReadUInt32();
-            string magic = null;
+            var pakf = new PAKF(r);
 
-            if(numTextures > 0)
+            foreach(var tl in pakf.m_textureLocations)
             {
-                do
-                {
-                    long blockStart = r.BaseStream.Position;
-                    magic = Encoding.ASCII.GetString(r.ReadBytes(4));
-                    long end = blockStart + r.ReadUInt32();
-                    switch (magic)
-                    {
-                        case "DUMY":
-                            break;
-                        case "TEXN":
-                            uint number = r.ReadUInt32();
-                            string name = Encoding.ASCII.GetString(r.ReadBytes(4)) + number;
-                            var texEntry = new TextureEntry();
-                            texEntry.m_file = parent;
-                            texEntry.m_postion = blockStart + 8;
-                            if(!parent.m_zipped)
-                            {
-                                texEntry.m_postion -= parent.m_offset;
-                            }
+                var texEntry = new TextureEntry();
+                texEntry.m_file = parent;
+                texEntry.m_postion = tl.m_offset;
 
-                            s_textureLib[name] = texEntry;
-                            s_textureLib[parent.m_path + name] = texEntry;
-                            break;
-
-                    }
-                    if (magic[0] == 0 || magic == "IPAC")
-                    {
-                        break;
-                    }
-                    r.BaseStream.Seek(end, SeekOrigin.Begin);
-                }
-                while (true);
+                s_textureLib[tl.m_name] = texEntry;
+                s_textureLib[parent.m_path + tl.m_name] = texEntry;
             }
-            r.BaseStream.Seek((parent.m_zipped ? 0 : parent.m_offset) + pakfSize, SeekOrigin.Begin);
-            ReadIPAC(tac, parent, r);
+
+            if(pakf.m_iPac != null)
+            {
+                AddIPAC(tac, parent, pakf.m_iPac.m_entries);
+            }
         }
 
-        static void ReadIPAC(string tac, TACEntry parent, BinaryReader r)
+        static void ReadAFS(string tac, TACEntry parent, BinaryReader r)
         {
-            var parentHash = parent.m_path.Split('/')[2];
+            var afs = new AFS(r);
 
-            long basePos = r.BaseStream.Position;
+            AddIPAC(tac, parent, afs.m_entries);
+        }
 
-            string magic = Encoding.ASCII.GetString(r.ReadBytes(4));
-            if (magic != "IPAC")
+        static void AddIPAC(string tac, TACEntry parent, IPAC.Entry[] entries)
+        {
+            if (entries == null)
             {
                 return;
             }
-            uint size1 = r.ReadUInt32();
-            uint num = r.ReadUInt32();
-            uint size2 = r.ReadUInt32();
 
-            r.BaseStream.Seek(size1 - 16, SeekOrigin.Current);
+            var parentHash = parent.m_path.Split('/')[2];
 
             parent.m_children = new List<TACEntry>();
 
-            for (int i = 0; i < num; i++)
+            foreach (var e in entries)
             {
-                string fn = Encoding.ASCII.GetString(r.ReadBytes(8)).Trim('\0');
-                string ext = Encoding.ASCII.GetString(r.ReadBytes(4)).Trim('\0');
-                uint ofs = r.ReadUInt32();
-                uint length = r.ReadUInt32();
-
                 TACEntry newE = new TACEntry();
 
-                newE.m_path = parent.m_path + "_" + fn;
-                newE.m_name = fn + "." + ext;
-                newE.m_offset = (uint)(ofs + basePos);
-                if (!parent.m_zipped)
-                {
-                    newE.m_offset -= parent.m_offset;
-                }
-                newE.m_length = length;
+                newE.m_path = parent.m_path + "_" + e.m_filename;
+                newE.m_name = e.m_filename + "." + e.m_ext;
+                newE.m_offset = (uint)e.m_offset;
+                newE.m_length = (uint)e.m_length;
                 newE.m_parent = parent;
-                newE.m_type = ext;
+                newE.m_type = e.m_ext;
 
-                string hash = parentHash + "_" + fn;
+                string hash = parentHash + "_" + e.m_filename;
                 int fnIndex = 1;
 
                 while (m_files[tac].ContainsKey(hash))
                 {
-                    hash = parentHash + "_" + fn + fnIndex;
-                    newE.m_path = parent.m_path + "_" + fn + fnIndex;
+                    hash = parentHash + "_" + e.m_filename + fnIndex;
+                    newE.m_path = parent.m_path + "_" + e.m_filename + fnIndex;
                     fnIndex++;
                 }
 
                 m_files[tac].Add(hash, newE);
                 parent.m_children.Add(newE);
-                AddEntryToType(ext, newE);
+                AddEntryToType(tac, e.m_ext, newE);
 
                 if (newE.m_fileType == FileType.MODEL)
                 {
-                    if (!m_modelToTAC.ContainsKey(fn))
+                    if (!m_modelToTAC.ContainsKey(e.m_filename))
                     {
-                        m_modelToTAC[fn] = new List<TACEntry>();
+                        m_modelToTAC[e.m_filename] = new List<TACEntry>();
                     }
-                    m_modelToTAC[fn].Add(parent);
+                    m_modelToTAC[e.m_filename].Add(parent);
                 }
 
                 //ExtractFile(newE);

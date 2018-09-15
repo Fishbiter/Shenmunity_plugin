@@ -109,7 +109,13 @@ namespace Shenmunity
 
             foreach (var r in m_list)
             {
-                string name = (r.m_parent != null ? r.m_parent.m_name + "/" : "") + r.m_name;
+                string name = r.m_name;
+                var parent = r.m_parent;
+                while(parent != null)
+                {
+                    name = parent.m_name + "/" + name;
+                    parent = parent.m_parent;
+                }
 
                 if (!string.IsNullOrEmpty(m_search) && (string.IsNullOrEmpty(name) || name.IndexOf(m_search, System.StringComparison.OrdinalIgnoreCase) == -1))
                     continue;

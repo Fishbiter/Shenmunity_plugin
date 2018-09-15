@@ -67,7 +67,7 @@ namespace Shenmunity
                                 float i2 = m_reader.ReadSingle();
                                 string model = ReadString();
                                 outS.WriteLine(string.Format("{0}: {1} {2} {3}", prop, i1, i2, model));
-                                model = model.TrimStart('$');
+                                model = model.TrimStart(new char[] { '$', '@' });
                                 node.m_model = Path.GetFileNameWithoutExtension(model);
                             }
                             else if(i1 == 3)
