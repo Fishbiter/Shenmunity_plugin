@@ -11,6 +11,7 @@ namespace Shenmunity
         static ShenmueAssetRef m_ref;
         static Vector2 m_scroll;
         static bool m_showPaths;
+        static bool m_showDuplicates = false;
         static string m_search;
         static int m_offset;
 
@@ -73,7 +74,11 @@ namespace Shenmunity
                 return;
             }
 
-            m_showPaths = GUILayout.Toggle(m_showPaths, "Show paths");
+            using (new GUILayout.HorizontalScope())
+            {
+                m_showPaths = GUILayout.Toggle(m_showPaths, "Show paths");
+                m_showDuplicates = GUILayout.Toggle(m_showDuplicates, "Show duplicates");
+            }
             m_search = GUILayout.TextField(m_search);
 
             using (new GUILayout.HorizontalScope())
@@ -109,6 +114,9 @@ namespace Shenmunity
 
             foreach (var r in m_list)
             {
+                if(r.m_duplicate && !m_showDuplicates)
+                    continue;
+
                 string name = r.m_fullName;
 
                 if (!string.IsNullOrEmpty(m_search) && (string.IsNullOrEmpty(name) || name.IndexOf(m_search, System.StringComparison.OrdinalIgnoreCase) == -1))

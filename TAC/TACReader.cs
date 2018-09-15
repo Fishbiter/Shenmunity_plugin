@@ -73,6 +73,7 @@ namespace Shenmunity
             public uint m_offset;
             public uint m_length;
             public bool m_zipped;
+            public bool m_duplicate;
             public TACEntry m_parent;
 
             public List<TACEntry> m_children;
@@ -217,6 +218,8 @@ namespace Shenmunity
             }
             using (var file = File.OpenText(s_namesFile))
             {
+                var seen = new Dictionary<string, bool>();
+
                 string line;
                 while ((line = file.ReadLine()) != null)
                 {
@@ -225,6 +228,8 @@ namespace Shenmunity
                     if (e != null)
                     {
                         e.m_name = ps[1];
+                        e.m_duplicate = seen.ContainsKey(ps[1]);
+                        seen[ps[1]] = true;
                     }
                 }
             }
