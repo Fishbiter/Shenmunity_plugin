@@ -76,6 +76,21 @@ namespace Shenmunity
             public TACEntry m_parent;
 
             public List<TACEntry> m_children;
+
+            public string m_fullName
+            {
+                get
+                {
+                    string name = m_name;
+                    var parent = m_parent;
+                    while (parent != null)
+                    {
+                        name = parent.m_name + "/" + name;
+                        parent = parent.m_parent;
+                    }
+                    return name;
+                }
+            }
         }
 
         static Dictionary<string, string> s_sources = new Dictionary<string, string>

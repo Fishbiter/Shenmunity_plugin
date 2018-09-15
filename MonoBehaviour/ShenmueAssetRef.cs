@@ -36,7 +36,14 @@ namespace Shenmunity
                     {
                         if(entry.m_parent != null)
                         {
-                            GUILayout.Label(entry.m_parent.m_name+"/");
+                            var p = entry.m_parent;
+                            string parentName = "";
+                            while(p != null)
+                            {
+                                parentName = p.m_name + "/" + parentName;
+                                p = p.m_parent;
+                            }
+                            GUILayout.Label(parentName);
                         }
 
                         var name = EditorGUILayout.DelayedTextField("", entry.m_name);
