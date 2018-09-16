@@ -72,7 +72,6 @@ namespace Shenmunity
             public FileType m_fileType;
             public uint m_offset;
             public uint m_length;
-            public bool m_zipped;
             public bool m_duplicate;
             public TACEntry m_parent;
 
@@ -260,29 +259,35 @@ namespace Shenmunity
                 stream = new SubStream(stream, e.m_offset, e.m_length);
                 length = e.m_length;
 
-                if(e.m_zipped && unzip)
+                if (unzip)
                 {
-                    byte[] bytes;
+                    var header = new BinaryReader(stream).ReadBytes(2);
+                    stream.Seek(-2, SeekOrigin.Current);
 
-                    if (m_gzipCache.ContainsKey(e))
+                    if (header[0] == 0x1f && header[1] == 0x8b)
                     {
-                        bytes = m_gzipCache[e];
-                        length = (uint)bytes.Length;
+                        byte[] bytes;
+
+                        if (m_gzipCache.ContainsKey(e))
+                        {
+                            bytes = m_gzipCache[e];
+                            length = (uint)bytes.Length;
+                        }
+                        else
+                        {
+                            stream.Seek(-4, SeekOrigin.End);
+                            length = new BinaryReader(stream).ReadUInt32();
+                            stream.Seek(0, SeekOrigin.Begin);
+
+                            var gzip = new GZipStream(stream, CompressionMode.Decompress);
+                            bytes = new byte[length];
+                            gzip.Read(bytes, 0, (int)length);
+
+                            m_gzipCache[e] = bytes;
+                        }
+
+                        stream = new MemoryStream(bytes);
                     }
-                    else
-                    {
-                        stream.Seek(-4, SeekOrigin.End);
-                        length = new BinaryReader(stream).ReadUInt32();
-                        stream.Seek(0, SeekOrigin.Begin);
-
-                        var gzip = new GZipStream(stream, CompressionMode.Decompress);
-                        bytes = new byte[length];
-                        gzip.Read(bytes, 0, (int)length);
-
-                        m_gzipCache[e] = bytes;
-                    }
-
-                    stream = new MemoryStream(bytes);
                 }
 
                 return stream;
