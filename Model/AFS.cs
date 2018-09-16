@@ -27,8 +27,6 @@ namespace Shenmunity
                 m_entries[i].m_length = r.ReadUInt32();
             }
 
-            bool gotFilenames = false;
-
             if(m_entries[0].m_offset - r.BaseStream.Position >= 8)
             {
                 r.BaseStream.Seek(m_entries[0].m_offset - 8, SeekOrigin.Begin);
@@ -36,7 +34,6 @@ namespace Shenmunity
                 r.BaseStream.Seek(fileListOffset, SeekOrigin.Begin);
                 if (fileListOffset != 0)
                 {
-                    gotFilenames = true;
                     for (int i = 0; i < num; i++)
                     {
                         m_entries[i].m_filename = Encoding.ASCII.GetString(r.ReadBytes(32)).Trim('\0');
@@ -54,11 +51,12 @@ namespace Shenmunity
                 }
             }
 
-            if (!gotFilenames)
+            for (int i = 0; i < num; i++)
             {
-                for (int i = 0; i < num; i++)
-                {
+                if(string.IsNullOrEmpty(m_entries[i].m_filename))
                     m_entries[i].m_filename = "File" + i.ToString("D3");
+                if (string.IsNullOrEmpty(m_entries[i].m_ext))
+                {
                     r.BaseStream.Seek(m_entries[i].m_offset, SeekOrigin.Begin);
                     m_entries[i].m_ext = Encoding.ASCII.GetString(r.ReadBytes(4)).Trim('\0');
                 }

@@ -42,7 +42,8 @@ namespace Shenmunity
             {
                 foreach (var m in m_models)
                 {
-                    DestroyImmediate(m.gameObject);
+                    if(m)
+                        DestroyImmediate(m.gameObject);
                 }
                 m_models = null;
             }
