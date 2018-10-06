@@ -12,8 +12,12 @@ namespace Shenmunity
             uint v = br.ReadUInt16();
 
             float sign = (v & 0x8000) != 0 ? -1 : 1;
-            int exp = (((int)v >> 10) & 0x1f) - 15;
-            return sign * (float)Math.Pow(2, exp) * (1.0f + (float)(v & 0x1ff) / 0x200);
+
+            const int expBits = 5;
+            const int mantBits = 15 - expBits;
+
+            int exp = (((int)v >> mantBits) & ((1 << expBits)-1)) - ((1 << expBits) - 1)/2;
+            return sign * (float)Math.Pow(2, exp) * (1.0f + (float)(v & ((1 << mantBits) - 1)) / (1 << mantBits));
         }
 
         public static string ReadOffsetString(this BinaryReader br)
