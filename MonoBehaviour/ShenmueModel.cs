@@ -142,7 +142,7 @@ namespace Shenmunity
                     parent = transform;
                 }
 
-                nodes[id] = CreateBone(id, node, parent, existingNodes);
+                nodes[id] = CreateBone(string.Format("{0} ({1} {2} {3})", id, node.nodeId & 0xff, (node.nodeId >> 8) & 0xff, node.nodeId >> 16), node, parent, existingNodes);
 
                 var st = nodes[id].GetComponent<ShenmueTransform>();
 
@@ -456,10 +456,8 @@ namespace Shenmunity
             material.EnableKeyword("_ALPHATEST_ON");
         }
 
-        Transform CreateBone(uint id, MT5.Node node, Transform parent, Transform[] existingBones)
+        Transform CreateBone(string name, MT5.Node node, Transform parent, Transform[] existingBones)
         {
-            string name = id.ToString();
-
             var bone = existingBones.FirstOrDefault(x => x.name == name);
             if(!bone)
             {

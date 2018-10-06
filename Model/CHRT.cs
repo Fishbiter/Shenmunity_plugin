@@ -46,12 +46,12 @@ namespace Shenmunity
             {
                 while (reader.BaseStream.Position < endBlock)
                 {
-                    var prop = ReadString();
+                    var prop = m_reader.ReadOffsetString();
                     switch (prop.ToUpper())
                     {
                         case "DEFIMAGE":
-                            Expect(35, outS);
-                            string id = ReadString();
+                            m_reader.Expect(35, outS);
+                            string id = m_reader.ReadOffsetString();
                             uint unknown = m_reader.ReadUInt32();
                             outS.WriteLine(string.Format("{0}: {1} {2}", prop, id, unknown));
 
@@ -65,14 +65,14 @@ namespace Shenmunity
                             if(i1 == 25) //Model?
                             {
                                 float i2 = m_reader.ReadSingle();
-                                string model = ReadString();
+                                string model = m_reader.ReadOffsetString();
                                 outS.WriteLine(string.Format("{0}: {1} {2} {3}", prop, i1, i2, model));
                                 model = model.TrimStart(new char[] { '$', '@' });
                                 node.m_model = Path.GetFileNameWithoutExtension(model);
                             }
                             else if(i1 == 3)
                             {
-                                string i2 = ReadString();
+                                string i2 = m_reader.ReadOffsetString();
                                 outS.WriteLine(string.Format("{0}: {1} {2}", prop, i1, i2));
 
                                 foreach(var n in m_defImage)
@@ -92,8 +92,8 @@ namespace Shenmunity
 
                             break;
                         case "CHARACTER":
-                            Expect(34, outS);
-                            string ii = ReadString();
+                            m_reader.Expect(34, outS);
+                            string ii = m_reader.ReadOffsetString();
                             uint ii2 = m_reader.ReadUInt32();
                             outS.WriteLine(string.Format("{0}: {1} {2}", prop, ii, ii2));
                             node = new CHRTNode();
@@ -142,7 +142,7 @@ namespace Shenmunity
                             float hgty = m_reader.ReadSingle();
                             float hgtz = m_reader.ReadSingle();
                             uint hgtp1 = m_reader.ReadUInt32();
-                            string hgtp2 = ReadString();
+                            string hgtp2 = m_reader.ReadOffsetString();
                             uint hgtp3 = m_reader.ReadUInt32();
                             outS.WriteLine(string.Format("{0}: {1}, {2}, {3}, {4}, {5}, {6}", prop, hgtx, hgty, hgtz, hgtp1, hgtp2, hgtp3));
                             break;
@@ -157,7 +157,7 @@ namespace Shenmunity
                             break;
                         case "ADJUST":
                             uint adj = m_reader.ReadUInt32();
-                            string adj2 = ReadString();
+                            string adj2 = m_reader.ReadOffsetString();
                             outS.WriteLine(string.Format("{0}: {1} {2}", prop, adj, adj2));
                             break;
                         case "DISP":
@@ -200,44 +200,6 @@ namespace Shenmunity
         public IEnumerable<string> GetModelNames()
         {
             return m_defImage.Select(x => x.m_model);
-        }
-
-        void Expect(uint val, StreamWriter outS)
-        {
-            uint v = m_reader.ReadUInt32();
-            if(v != val)
-            {
-                outS.WriteLine(string.Format("Unexpected value {0} - usually {1}", v, val));
-            }
-        }
-
-        string ReadString()
-        {
-            long pos = m_reader.BaseStream.Position;
-            long ofs = m_reader.ReadUInt32();
-
-            if((ofs & 0xff000000) != 0) //probably in-place string
-            {
-                m_reader.BaseStream.Seek(-4, SeekOrigin.Current);
-                return Encoding.ASCII.GetString(m_reader.ReadBytes(4));
-            }
-
-            m_reader.BaseStream.Seek(ofs-4, SeekOrigin.Current);
-
-            var bytes = new List<byte>();
-            do
-            {
-                var b = m_reader.ReadByte();
-                if (b == 0)
-                    break;
-                bytes.Add(b);
-            }
-            while (true);
-
-            var str = Encoding.ASCII.GetString(bytes.ToArray());
-
-            m_reader.BaseStream.Seek(pos + 4, SeekOrigin.Begin);
-            return str;
         }
     }
 }

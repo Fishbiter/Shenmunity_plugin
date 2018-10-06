@@ -74,7 +74,7 @@ namespace Shenmunity
         {
             public Node(BinaryReader br)
             {
-                nodeId = br.ReadUInt32();
+                nodeId = br.ReadInt32();
                 meshData = br.ReadUInt32();
                 rotX = 360.0f * br.ReadInt32() / 0xffff;
                 rotY = 360.0f * br.ReadInt32() / 0xffff;
@@ -88,12 +88,12 @@ namespace Shenmunity
                 child = br.ReadUInt32();
                 next = br.ReadUInt32();
                 up = br.ReadUInt32();
-                objectName = br.ReadUInt32();
+                objectName = br.ReadAscii(4);
                 unknown5 = br.ReadUInt32();
                 nextObject = br.ReadUInt32();
             }
 
-            uint nodeId;
+            public int nodeId;
             public uint meshData;
             public float rotX;
             public float rotY;
@@ -104,7 +104,7 @@ namespace Shenmunity
             public uint child;
             public uint next;
             public uint up;
-            uint objectName; //4 bytes
+            string objectName; //4 bytes
             uint unknown5;
             public uint nextObject;
 
@@ -237,9 +237,9 @@ namespace Shenmunity
                             break;
                         case 0x0008000e:
                             //this is "MeshData" I don't know what it's for
-                            m_reader.ReadUInt32();
-                            m_reader.ReadUInt32();
-                            m_reader.ReadUInt32();
+                            uint md0 = m_reader.ReadUInt32();
+                            uint md1 = m_reader.ReadUInt32();
+                            uint md2 = m_reader.ReadUInt32();
                             break;
                         default:
                             Debug.LogWarningFormat("Unknown mesh type {0}", magic);

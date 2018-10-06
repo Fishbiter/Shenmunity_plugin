@@ -29,6 +29,7 @@ namespace Shenmunity
             PAWN,
             CHRT,
             SCN3,
+            MOTN,
 
             COUNT
         }
@@ -53,6 +54,7 @@ namespace Shenmunity
             new string[] { "PAWN" },//PAWN
             new string[] { "CHRT" },
             new string[] { "SCN3" },
+            new string[] { "MOTN", " " },
         };
 
         public struct TextureEntry
@@ -227,10 +229,31 @@ namespace Shenmunity
                     if (e != null)
                     {
                         e.m_name = ps[1];
-                        e.m_duplicate = seen.ContainsKey(ps[1]);
-                        seen[ps[1]] = true;
+
+                        //only set duplication for root entries
+                        if (e.m_parent == null)
+                        {
+                            if (seen.ContainsKey(ps[1]))
+                            {
+                                SetDuplicate(e);
+                            }
+                            seen[ps[1]] = true;
+                        }
                     }
                 }
+            }
+        }
+
+        static void SetDuplicate(TACEntry e)
+        {
+            e.m_duplicate = true;
+
+            if (e.m_children == null)
+                return;
+
+            foreach(var c in e.m_children)
+            {
+                SetDuplicate(c);
             }
         }
 
@@ -251,6 +274,7 @@ namespace Shenmunity
             if(e.m_parent != null)
             {
                 var parent = GetStream(file, e.m_parent, out length, unzip);
+                length = e.m_length;
                 return new SubStream(parent, e.m_offset, e.m_length);
             }
             else
