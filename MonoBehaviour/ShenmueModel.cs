@@ -29,6 +29,29 @@ namespace Shenmunity
         public const float SHENMUE_FLIP = -1.0f;
         
         Transform[] m_bones;
+        Bounds m_bounds;
+
+        static Dictionary<int, string> s_nodeIdToHumanBone = new Dictionary<int, string>()
+            {
+                { 1, "Spine" },
+                { 14, "Hips" },
+                { 16, "RightUpperLeg" },
+                { 17, "RightLowerLeg" },
+                { 18, "RightFoot" },
+                { 21, "LeftUpperLeg" },
+                { 22, "LeftLowerLeg" },
+                { 23, "LeftFoot" },
+                { 4, "RightShoulder" },
+                { 5, "RightUpperArm" },
+                { 6, "RightLowerArm" },
+                { 191, "RightHand" },
+                { 9, "LeftShoulder" },
+                { 10, "LeftUpperArm" },
+                { 11, "LeftLowerArm" },
+                { 190, "LeftHand" },
+                { 189, "Head" },
+                { 188, "Jaw" }
+            };
 
 #if UNITY_EDITOR
         [MenuItem("GameObject/Shenmunity/Model", priority = 10)]
@@ -142,7 +165,7 @@ namespace Shenmunity
                     parent = transform;
                 }
 
-                nodes[id] = CreateBone(string.Format("{0} ({1} {2} {3})", id, node.nodeId & 0xff, (node.nodeId >> 8) & 0xff, node.nodeId >> 16), node, parent, existingNodes);
+                nodes[id] = CreateBone(node, parent, existingNodes);
 
                 var st = nodes[id].GetComponent<ShenmueTransform>();
 
@@ -197,11 +220,10 @@ namespace Shenmunity
                     nodesToGenerate.Add(model.m_nodes[id]);
                 }
 
-                Bounds bounds;
                 Material[] meshMats;
-                var mesh = CreateMeshForNodes(transform, model, nodesToGenerate.ToArray(), m_bones, nodes, out bounds, mats, out meshMats);
+                var mesh = CreateMeshForNodes(transform, model, nodesToGenerate.ToArray(), m_bones, nodes, out m_bounds, mats, out meshMats);
 
-                SetMeshToGameObject(transform, mesh, meshMats, bounds);
+                SetMeshToGameObject(transform, mesh, meshMats, m_bounds);
             }
         }
 
@@ -456,8 +478,10 @@ namespace Shenmunity
             material.EnableKeyword("_ALPHATEST_ON");
         }
 
-        Transform CreateBone(string name, MT5.Node node, Transform parent, Transform[] existingBones)
+        Transform CreateBone(MT5.Node node, Transform parent, Transform[] existingBones)
         {
+            string name = string.Format("{0} ({1} {2} {3})", node.id, node.nodeId & 0xff, (node.nodeId >> 8) & 0xff, node.nodeId >> 16);
+
             var bone = existingBones.FirstOrDefault(x => x.name == name);
             if(!bone)
             {
@@ -472,14 +496,100 @@ namespace Shenmunity
                 bone.Rotate(Vector3.up, node.rotY * SHENMUE_FLIP);
                 bone.Rotate(Vector3.right, node.rotX);
 
-                bone.gameObject.AddComponent<ShenmueTransform>();
+                var st = bone.gameObject.AddComponent<ShenmueTransform>();
+
+                if ((node.nodeId & 0xff00) == 0 || (node.nodeId & 0xff00) == 0xff00)
+                {
+                    int id = node.nodeId & 0xff;
+                    if (s_nodeIdToHumanBone.ContainsKey(id))
+                    {
+                        if (!GetTransformForHumanBone(s_nodeIdToHumanBone[id]))
+                        {
+                            st.m_humanBone = s_nodeIdToHumanBone[id];
+                        }
+                        else
+                        {
+                            st.transform.localScale = Vector3.zero;
+                        }
+                    }
+                }
             }
             
             return bone;
         }
 
+        bool FixSkeleton()
+        {
+            //Spine must be a child of hips
+            var hips = GetTransformForHumanBone("Hips");
+            var spine = GetTransformForHumanBone("Spine");
+
+            if (!hips || !spine)
+                return false;
+
+            if(!spine.transform.IsChildOf(hips.transform))
+            {
+                var hipParent = spine.transform.parent;
+
+                hips.transform.parent = spine.transform.parent;
+                spine.transform.parent = hips.transform;
+
+                hipParent.localPosition = new Vector3(0, m_bounds.extents.y - m_bounds.center.y, 0);
+                hipParent.localEulerAngles = new Vector3(0, 180, 0);
+
+                //T-pose
+                var leftShoulder = GetTransformForHumanBone("LeftShoulder");
+                var leftUpperArm = GetTransformForHumanBone("LeftUpperArm");
+
+                if(!leftShoulder || !leftUpperArm)
+                {
+                    return false;
+                }
+
+                leftShoulder.transform.Rotate(new Vector3(0, 25, 0));
+                leftUpperArm.transform.Rotate(new Vector3(0, -60, 0));
+
+                var rightShoulder = GetTransformForHumanBone("RightShoulder");
+                var rightUpperArm = GetTransformForHumanBone("RightUpperArm");
+
+                if (!rightShoulder || !rightUpperArm)
+                {
+                    return false;
+                }
+
+                rightShoulder.transform.Rotate(new Vector3(0, -25, 0));
+                rightUpperArm.transform.Rotate(new Vector3(0, 60, 0));
+            }
+
+            //Insert neck bone
+            var head = GetTransformForHumanBone("Head");
+            var neck = GetTransformForHumanBone("Neck");
+
+            if (!head)
+                return false;
+            
+            if (!head)
+            {
+                var st = new GameObject("Neck").AddComponent<ShenmueTransform>();
+                st.m_humanBone = "Neck";
+                st.transform.parent = neck.transform.parent;
+                st.transform.localPosition = Vector3.zero;
+                st.transform.localRotation = Quaternion.identity;
+
+                neck.transform.parent = st.transform;
+            }
+
+            return true;
+        }
+
         public void CreateAvatar()
         {
+            if(!FixSkeleton())
+            {
+                Debug.LogError("Fix Skeleton failed");
+                return;
+            }
+
             var hd = new HumanDescription();
 
             var sts = GetComponentsInChildren<ShenmueTransform>();
@@ -525,6 +635,18 @@ namespace Shenmunity
                 anim = gameObject.AddComponent<Animator>();
             }
             anim.avatar = avatar;
+        }
+
+        ShenmueTransform GetTransformForHumanBone(string bone)
+        {
+            foreach(var st in GetComponentsInChildren<ShenmueTransform>())
+            {
+                if(st.m_humanBone == bone)
+                {
+                    return st;
+                }
+            }
+            return null;
         }
     }
 
