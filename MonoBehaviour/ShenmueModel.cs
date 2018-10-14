@@ -50,7 +50,7 @@ namespace Shenmunity
                 { 11, "LeftLowerArm" },
                 { 190, "LeftHand" },
                 { 189, "Head" },
-                { 188, "Jaw" }
+                { 188, "Jaw" } 
             };
 
 #if UNITY_EDITOR
@@ -535,7 +535,7 @@ namespace Shenmunity
                 spine.transform.parent = hips.transform;
 
                 hipParent.localPosition = new Vector3(0, m_bounds.extents.y - m_bounds.center.y, 0);
-                hipParent.localEulerAngles = new Vector3(0, 180, 0);
+                hipParent.Rotate(new Vector3(0, 180, 0));
 
                 //T-pose
                 var leftShoulder = GetTransformForHumanBone("LeftShoulder");
@@ -561,24 +561,13 @@ namespace Shenmunity
                 rightUpperArm.transform.Rotate(new Vector3(0, 60, 0));
             }
 
-            //Insert neck bone
-            var head = GetTransformForHumanBone("Head");
-            var neck = GetTransformForHumanBone("Neck");
-
-            if (!head)
-                return false;
-            
-            if (!head)
+            //It seem mecanim rarely does sensible things with jaw bone...
+            var jaw = GetTransformForHumanBone("Jaw");
+            if(jaw)
             {
-                var st = new GameObject("Neck").AddComponent<ShenmueTransform>();
-                st.m_humanBone = "Neck";
-                st.transform.parent = neck.transform.parent;
-                st.transform.localPosition = Vector3.zero;
-                st.transform.localRotation = Quaternion.identity;
-
-                neck.transform.parent = st.transform;
+                jaw.m_humanBone = "";
             }
-
+            
             return true;
         }
 
