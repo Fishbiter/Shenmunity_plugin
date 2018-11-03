@@ -27,7 +27,10 @@ namespace Shenmunity
         string m_pathCreated;
 
         public const float SHENMUE_FLIP = -1.0f;
-        
+
+        [SerializeField][HideInInspector]
+        bool m_createAvatar;
+
         Transform[] m_bones;
         Bounds m_bounds;
 
@@ -76,6 +79,10 @@ namespace Shenmunity
         private void Awake()
         {
             LoadModel();
+            if (m_createAvatar)
+            {
+                CreateAvatar();
+            }
         }
 
         public void OnChange()
@@ -579,6 +586,9 @@ namespace Shenmunity
                 return;
             }
 
+            var parent = transform.parent;
+            transform.parent = null;
+
             var hd = new HumanDescription();
 
             var sts = GetComponentsInChildren<ShenmueTransform>();
@@ -624,6 +634,8 @@ namespace Shenmunity
                 anim = gameObject.AddComponent<Animator>();
             }
             anim.avatar = avatar;
+            m_createAvatar = true;
+            transform.parent = parent;
         }
 
         ShenmueTransform GetTransformForHumanBone(string bone)
