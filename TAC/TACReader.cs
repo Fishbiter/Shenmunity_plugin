@@ -30,6 +30,7 @@ namespace Shenmunity
             CHRT,
             SCN3,
             MOTN,
+            ATTR,
 
             COUNT
         }
@@ -44,10 +45,10 @@ namespace Shenmunity
             new string[] { "PAKS" }, //PAKS
             new string[] { "PAKF" }, //PAKF
             new string[] { "MDP7", "MDC7", "HRCM", "CHRM", "MAPM",
-            //    "MDOX", //unlikely to be model data (maybe texture?)
-            //    "MDLX",
-            //    "MDCX",
-            //    "MDPX"
+                "MDOX", 
+//                "MDLX",
+ //               "MDCX",
+ //               "MDPX"
             }, //MODEL,
             new string[] { "DTPK" },//SND
             new string[] { "GBIX", "TEXN" },//PVR
@@ -55,6 +56,7 @@ namespace Shenmunity
             new string[] { "CHRT" },
             new string[] { "SCN3" },
             new string[] { "MOTN", " " },
+            new string[] { "ATTR" },
         };
 
         public struct TextureEntry
@@ -71,6 +73,7 @@ namespace Shenmunity
             public string m_path;
             public string m_name;
             public string m_type;
+            public string m_diskPath;
             public FileType m_fileType;
             public uint m_offset;
             public uint m_length;
@@ -97,14 +100,13 @@ namespace Shenmunity
 
         static Dictionary<string, string> s_sources = new Dictionary<string, string>
         {
-            { "Shenmue", "sm1/archives/dx11/data" },
-           // { "Shenmue2", "sm2/archives/dx11/data" },
+           { "Shenmue", "sm1/archives/dx11/data" },
+          // { "Shenmue2", "sm2/archives/dx11/data" },
         };
 
         static string s_namesFile = "Assets/Plugins/Shenmunity/Names.txt";
 
         static Dictionary<string, Dictionary<string, TACEntry>> m_files;
-        static Dictionary<string, string> m_tacToFilename = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
         static Dictionary<FileType, List<TACEntry>> m_byType;
         static Dictionary<string, int> m_unknownTypes;
         static Dictionary<string, List<TACEntry>> m_modelToTAC = new Dictionary<string, List<TACEntry>>(StringComparer.InvariantCultureIgnoreCase);
@@ -152,7 +154,7 @@ namespace Shenmunity
             foreach(var path in libraryPaths)
             {
                 var smpath = path + "/" + "SMLaunch";
-                if (Directory.Exists(smpath + "/" + s_sources["Shenmue"]))
+                if (Directory.Exists(smpath + "/" + s_sources.Values.First()))
                 {
                     s_shenmuePath = smpath;
                     break;
@@ -163,12 +165,6 @@ namespace Shenmunity
             {
                 throw new FileNotFoundException("Couldn't find shenmue installation in any steam library dir");
             }
-        }
-
-        static public string GetTAC(string path)
-        {
-            string[] p = path.Split('/');
-            return s_shenmuePath + "/" + s_sources[p[0]] + "/" + m_tacToFilename[p[0]+"/"+p[1]];
         }
 
         static public TACEntry GetEntry(string path)
@@ -261,25 +257,25 @@ namespace Shenmunity
         {
             GetFiles();
 
-            return GetBytes(GetTAC(path), GetEntry(path), out length, unzip);
+            return GetBytes(GetEntry(path), out length, unzip);
         }
 
-        static BinaryReader GetBytes(string file, TACEntry e, out uint length, bool unzip = true)
+        static BinaryReader GetBytes(TACEntry e, out uint length, bool unzip = true)
         {
-            return new BinaryReader(new DebugStream(GetStream(file, e, out length, unzip)));
+            return new BinaryReader(new DebugStream(GetStream(e, out length, unzip)));
         }
 
-        static Stream GetStream(string file, TACEntry e, out uint length, bool unzip)
+        static Stream GetStream(TACEntry e, out uint length, bool unzip)
         { 
             if(e.m_parent != null)
             {
-                var parent = GetStream(file, e.m_parent, out length, unzip);
+                var parent = GetStream(e.m_parent, out length, unzip);
                 length = e.m_length;
                 return new SubStream(parent, e.m_offset, e.m_length);
             }
             else
             {
-                Stream stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+                Stream stream = new FileStream(e.m_diskPath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 stream = new SubStream(stream, e.m_offset, e.m_length);
                 length = e.m_length;
 
@@ -355,14 +351,15 @@ namespace Shenmunity
             //Load tad file
             string tadFile = Path.ChangeExtension(tac, ".tad");
 
-            var dir = new Dictionary<string, TACEntry>(StringComparer.InvariantCultureIgnoreCase);
-
             string tacName = Path.GetFileNameWithoutExtension(tadFile);
             tacName = shortForm + "/" + tacName.Substring(0, tacName.IndexOf("_")); //remove hash (these change per release)
-            
-            m_files[tacName] = dir;
-            m_tacToFilename[tacName] = Path.GetFileName(tac);
 
+            if (!m_files.ContainsKey(tacName))
+            {
+                m_files[tacName] = new Dictionary<string, TACEntry>(StringComparer.InvariantCultureIgnoreCase); ;
+            }
+            var dir = m_files[tacName];
+           
             using (BinaryReader reader = new BinaryReader(new FileStream(tadFile, FileMode.Open, FileAccess.Read, FileShare.Read)))
             {
                 //skip header
@@ -371,6 +368,7 @@ namespace Shenmunity
                 while (true)
                 {
                     var r = new TACEntry();
+                    r.m_diskPath = tac;
 
                     reader.BaseStream.Seek(4, SeekOrigin.Current); //skip padding (at file begin)
                     r.m_offset = reader.ReadUInt32();
@@ -401,12 +399,14 @@ namespace Shenmunity
         static public void ExtractFile(TACEntry entry, bool unzip = true)
         {
             uint len;
-            var br = GetBytes(entry.m_path, out len, unzip);
-            var path = Directory.GetCurrentDirectory();
-            path += "/" + entry.m_path + "." + String.Join("_", entry.m_type.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+            using (var br = GetBytes(entry.m_path, out len, unzip))
+            {
+                var path = Directory.GetCurrentDirectory();
+                path += "/" + entry.m_path + "." + String.Join("_", entry.m_type.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
 
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllBytes(path, br.ReadBytes((int)len));
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllBytes(path, br.ReadBytes((int)len));
+            }
         }
 
         static void BuildTypes()
@@ -419,13 +419,12 @@ namespace Shenmunity
                 foreach (var e in m_files[tac].Values.ToArray())
                 {
                     uint len;
-                    var reader = GetBytes(e.m_path, out len);
-                    var header = reader.ReadBytes(4);
-                    string type = Encoding.ASCII.GetString(header).Trim('\0');
+                    using (var reader = GetBytes(e.m_path, out len))
+                    {
+                        e.m_type = reader.ReadAscii(4).Trim('\0');
+                    }
 
-                    e.m_type = type;
-
-                    AddEntryToType(tac, type, e);
+                    AddEntryToType(tac, e.m_type, e);
                 }
             }
         }
@@ -446,17 +445,26 @@ namespace Shenmunity
                             if (type == "PAKS")
                             {
                                 uint len;
-                                ReadPAKS(tac, e, GetBytes(e.m_path, out len));
+                                using (var br = GetBytes(e.m_path, out len))
+                                {
+                                    ReadPAKS(tac, e, br);
+                                }
                             }
                             else if (type == "PAKF")
                             {
                                 uint len;
-                                ReadPAKF(tac, e, GetBytes(e.m_path, out len));
+                                using (var br = GetBytes(e.m_path, out len))
+                                {
+                                    ReadPAKF(tac, e, br);
+                                }
                             }
                             else if (type == "AFS")
                             {
                                 uint len;
-                                ReadAFS(tac, e, GetBytes(e.m_path, out len));
+                                using (var br = GetBytes(e.m_path, out len))
+                                {
+                                    ReadAFS(tac, e, br);
+                                }
                             }
                         }
                         //catch(Exception exc)

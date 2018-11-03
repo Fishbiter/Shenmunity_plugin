@@ -105,5 +105,10 @@ namespace Shenmunity
         {
             m_stream.Write(buffer, offset, count);
         }
+
+        protected override void Dispose(bool disposing)
+        {
+            m_stream.Dispose();
+        }
     }
 }
